@@ -1,0 +1,40 @@
+//@version=5
+strategy("Near Breakout Confirmation", overlay=true, initial_capital=100000, default_qty_type=strategy.percent_of_equity, default_qty_value=10, commission_type=strategy.commission.percent, commission_value=0.04)
+
+lookback = input.int(20, "Breakout Lookback", minval=5)
+fastEma = input.int(50, "Fast EMA", minval=10)
+slowEma = input.int(200, "Slow EMA", minval=20)
+volMultiplier = input.float(1.5, "Volume Spike Multiplier", minval=1.0, step=0.1)
+stopPct = input.float(1.0, "Stop Loss %", minval=0.1, step=0.1) / 100
+riskReward = input.float(2.0, "Risk Reward Ratio", minval=1.0, step=0.5)
+
+prevHighest = ta.highest(high, lookback)[1]
+fastEmaValue = ta.ema(close, fastEma)
+slowEmaValue = ta.ema(close, slowEma)
+volAvg = ta.sma(volume, 20)
+
+breakoutCondition = close > prevHighest and high > prevHighest
+volumeCondition = volume > volAvg * volMultiplier
+trendCondition = close > fastEmaValue and fastEmaValue > slowEmaValue
+longCondition = breakoutCondition and volumeCondition and trendCondition
+
+var float entryPrice = na
+var float stopPrice = na
+var float targetPrice = na
+
+if longCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    entryPrice := close
+    stopPrice := close * (1 - stopPct)
+    targetPrice := close * (1 + (stopPct * riskReward))
+
+if strategy.position_size > 0 and not na(entryPrice)
+    stopPrice := entryPrice * (1 - stopPct)
+    targetPrice := entryPrice * (1 + (stopPct * riskReward))
+    strategy.exit("TP/SL", "Long", stop=stopPrice, limit=targetPrice)
+
+plotshape(longCondition and strategy.position_size == 0, title="Buy Signal", location=location.belowbar, color=color.green, style=shape.labelup, text="BUY")
+plot(fastEmaValue, color=color.blue, title="Fast EMA")
+plot(slowEmaValue, color=color.orange, title="Slow EMA")
+
+alertcondition(longCondition and strategy.position_size == 0, title="Long Breakout Alert", message="Breakout confirmed. Watch for entry.")
